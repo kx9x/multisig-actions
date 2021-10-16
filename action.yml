@@ -34,12 +34,11 @@ inputs:
 
 runs:
   using: "composite"
-  timeout-minutes: 60
   steps:
     - name: Create URL to the run output
       id: vars
       run: echo ::set-output name=run-url::https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID
-
+      shell: bash
     - name: Cache compiler installations
       uses: actions/cache@v2
       with:
@@ -55,6 +54,7 @@ runs:
 
     - name: Install ganache
       run: npm install -g ganache-cli@6.12.1
+      shell: bash
 
     - name: Set up python 3.8
       uses: actions/setup-python@v2
@@ -76,6 +76,8 @@ runs:
         python -m pip install --upgrade pip
         pip install wheel
         pip install -r requirements-dev.txt
+      shell: bash
+
     - name: Lock on send=true to avoid nonce race condition
       if: ${{ inputs.send  == 'true' }}
       uses: shogo82148/actions-mutex@v1
@@ -96,16 +98,17 @@ runs:
     - name: delete .brownie/accounts after cache download
       run: |
         rm -rf ~/.brownie/accounts
+      shell: bash
     
     - name: Add network config
-      timeout-minutes: 1
       run: |
         brownie networks list true
         cp network-config.yaml ~/.brownie/
         brownie networks list true
+      shell: bash
+
     - name: Run Function
       id: fn
-      timeout-minutes: ${{ inputs.file == 'hydrate_ci_cache' && 60 ||  20 }}
       env:
         POLYGON_ALCHEMY_PROJECT_ID: ${{ secrets.POLYGON_ALCHEMY_PROJECT_ID }}
         POLYGONSCAN_TOKEN: ${{ secrets.POLYGONSCAN_TOKEN }}
@@ -124,17 +127,8 @@ runs:
         cat error.txt
         echo "::endgroup::"
         exit 0
-    - name: Set timeout
-      if: failure()
-      id: timeout
-      run: |
-        echo "::group:: Output"
-        cat output.txt
-        echo "::endgroup::"
-        echo "::group:: Error"
-        cat error.txt
-        echo "::endgroup::"
-        echo "::set-output name=brownie-timeout::true"
+      shell: bash
+
     - name: Check failure
       id: failcheck
       run: |
@@ -145,6 +139,8 @@ runs:
         cat error.txt
         echo "::endgroup::"
         exit ${{ steps.fn.outputs.brownie-exit-code}}
+      shell: bash
+
     - name: Read nonce
       if: ${{ inputs.send  == 'true' }}
       id: nonce
@@ -189,6 +185,8 @@ runs:
         else
           echo "::set-output name=safe-link::https://gnosis-safe.io/app/#/safes/0x16388463d60FFE0661Cf7F1f31a7D658aC790ff7/transactions"
         fi
+      shell: bash
+
     - name: Edit comment with full run message
       if: ${{ inputs.send  == 'true' }}
       uses: peter-evans/create-or-update-comment@v1
@@ -203,6 +201,8 @@ runs:
       id: pr-url
       run: |
         echo "::set-output name=pr-url::https://github.com/${{github.repository}}/pull/${{ inputs.pull_request_number }}/files"
+      shell: bash
+
     - name: Create Telegram message
       id: telegram-message
       run: |
@@ -216,7 +216,8 @@ runs:
           echo "TELEGRAM_MESSAGE<<EOF" >> $GITHUB_ENV
           echo "$TELEGRAM_MESSAGE" >> $GITHUB_ENV
           echo "EOF" >> $GITHUB_ENV
-  
+      shell: bash
+
     - name: New TX Telegram Alert - Robowoofy Alert Chat
       if: ${{ inputs.send == 'true' }}
       uses: appleboy/telegram-action@master
@@ -277,17 +278,7 @@ runs:
           Grrrr grrrrr grrrrr ${{ steps.vars.outputs.run-url }} pipeline failed even though the brownie function succeeded!
       continue-on-error: true
 
-    - name: Telegram Alert On Brownie Timeout
-      if: ${{ failure() && steps.timeout.outputs.brownie-timeout == 'true' }}
-      uses: appleboy/telegram-action@master
-      with:
-        to: '-1001590254795'
-        token: ${{ secrets.TELEGRAM_TOKEN }}
-        message: |
-          Grrrr grrrrr grrrrr ${{ steps.vars.outputs.run-url }} brownie timed out!
-      continue-on-error: true
-
     - name: delete .brownie/accounts before cache upload
       run: |
         rm -rf ~/.brownie/accounts
-	
+      shell: bash
